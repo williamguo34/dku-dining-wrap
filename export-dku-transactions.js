@@ -28,7 +28,9 @@
 
   const WRAP_URL = "https://williamguo34.github.io/dku-dining-wrap/";
   const HANDOFF_STORAGE_KEY = "DKU_WRAP_V1";
-  const HANDOFF_MAX_BYTES = 3_500_000; // keep below common window.name limits
+  // Safari is much more likely to truncate/clear window.name on cross-site navigation.
+  // Keep this conservative; we also provide clipboard/CSV fallbacks.
+  const HANDOFF_MAX_BYTES = 1_000_000; // ~1MB
 
   // Some portals embed the transaction page inside frames/iframes.
   // In that case, using `window.name` / `location.href` on the subframe may not
@@ -67,6 +69,53 @@
        * Helpers
        ***********************/
       const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+      function isSafariLike() {
+        // Best-effort UA check. We mainly want Safari proper (incl. Mobile Safari),
+        // but exclude Chrome/Edge shells (including iOS variants).
+        const ua = String(navigator.userAgent || "");
+        const isSafari = /Safari\//.test(ua)
+          && !/Chrome\//.test(ua)
+          && !/Chromium\//.test(ua)
+          && !/CriOS\//.test(ua)
+          && !/Edg\//.test(ua)
+          && !/EdgiOS\//.test(ua);
+        return isSafari;
+      }
+
+      async function copyToClipboard(text) {
+        try {
+          if (navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
+            await navigator.clipboard.writeText(text);
+            return true;
+          }
+        } catch {}
+        return false;
+      }
+
+      function openWrapInNewTabWithName(nameStr) {
+        // In Safari, same-tab cross-site navigation often loses window.name.
+        // New-tab handoff via about:blank tends to be more reliable.
+        try {
+          const w = window.open("about:blank", "_blank");
+          if (!w) return false;
+          try { w.name = nameStr; } catch {}
+          try { w.location.href = WRAP_URL; } catch {}
+          return true;
+        } catch {
+          return false;
+        }
+      }
+
+      async function redirectWithBestEffort() {
+        // Give browsers a moment to persist window.name.
+        await sleep(60);
+        try {
+          TOP.location.replace(WRAP_URL);
+        } catch {
+          try { location.replace(WRAP_URL); } catch { location.href = WRAP_URL; }
+        }
+      }
 
       function assertOnPage() {
         if (typeof dtlsearch !== "function") {
@@ -336,15 +385,45 @@
       }
 
       // Write to both current window and top window (best-effort)
-      try { window.name = `${HANDOFF_STORAGE_KEY}:${json}`; } catch {}
-      try { TOP.name = `${HANDOFF_STORAGE_KEY}:${json}`; } catch {}
+      const nameStr = `${HANDOFF_STORAGE_KEY}:${json}`;
+
+      // --- Safari strategy:
+      // 1) Try opening a new tab and setting window.name there.
+      // 2) If blocked/unreliable, copy JSON payload to clipboard and open Wrap with #paste.
+      // 3) If clipboard fails, fall back to CSV download.
+      if (isSafariLike()) {
+        const opened = openWrapInNewTabWithName(nameStr);
+        if (opened) {
+          console.log("✅ Safari: opened Wrap in a new tab with window.name handoff.");
+          return;
+        }
+
+        const copied = await copyToClipboard(json);
+        if (copied) {
+          alert(
+            "Safari can't reliably do one-click transfer here.\n\n" +
+            "✅ Your data has been copied to the clipboard.\n" +
+            "Next: open DKU Dining Wrap and click 'Import JSON' (paste) in section 2."
+          );
+          try { TOP.location.href = WRAP_URL + "#paste"; } catch { location.href = WRAP_URL + "#paste"; }
+          return;
+        }
+
+        alert(
+          "Safari can't reliably do one-click transfer here, and clipboard access was blocked.\n\n" +
+          "We will download a CSV instead. Please upload it to the DKU Dining Wrap page."
+        );
+        const csv = toCSV(uniq);
+        downloadCSV(csv, EXPORT_FILENAME);
+        return;
+      }
+
+      // --- Default strategy (Chrome/Edge/Firefox): same-tab window.name + navigation
+      try { window.name = nameStr; } catch {}
+      try { TOP.name = nameStr; } catch {}
 
       console.log("✅ Saved rows into window.name. Redirecting to DKU Dining Wrap…");
-      try {
-        TOP.location.href = WRAP_URL;
-      } catch {
-        location.href = WRAP_URL;
-      }
+      await redirectWithBestEffort();
     } catch (e) {
       console.error(e);
       alert("❌ Export failed: " + (e?.message || e));
