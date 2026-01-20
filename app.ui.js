@@ -743,29 +743,6 @@
     setText("totalInvested", `¥${fmtMoney(stats.totalSpend)}`);
   }
 
-  function renderComparisonSlide(stats) {
-    const slide = document.querySelector('[data-title="Compared to DKU"]');
-    if (!slide) return;
-
-    // Calculate approximate percentiles (simplified)
-    const mealsPerMonth = Math.floor(stats.txns / Math.max(1, stats.months.length));
-    const spendingPerMonth = stats.totalSpend / Math.max(1, stats.months.length);
-
-    // Mock percentiles (in real app, you'd have actual DKU data)
-    let frequencyPercentile = "Top 75%";
-    if (mealsPerMonth > 25) frequencyPercentile = "Top 25%";
-    if (mealsPerMonth > 35) frequencyPercentile = "Top 10%";
-
-    let spendingPercentile = "Top 60%";
-    if (spendingPerMonth > 1500) spendingPercentile = "Top 30%";
-    if (spendingPerMonth > 2500) spendingPercentile = "Top 15%";
-
-    setText("mealFrequency", `${mealsPerMonth} meals/month`);
-    setText("frequencyPercentile", frequencyPercentile);
-    setText("spendingLevel", `¥${fmtMoney(spendingPerMonth)}/month`);
-    setText("spendingPercentile", spendingPercentile);
-  }
-
   function renderEndingSlide(stats) {
     const slide = document.querySelector('[data-title="The End"]');
     if (!slide) return;
@@ -782,7 +759,6 @@
     renderTimelineSlide(stats);
     renderMoneySlide(stats);
     renderAchievementsSlide(stats);
-    renderComparisonSlide(stats);
     renderMemoriesSlide(stats);
     renderPredictionsSlide(stats);
     renderShareableQuotesSlide(stats);
