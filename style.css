@@ -1,0 +1,160 @@
+/* DKU Dining Wrap MVP — minimal styling */
+:root{
+  --bg: #0b0d12;
+  --card: #121622;
+  --card2:#0f1320;
+  --text: #e9ecf1;
+  --muted:#a7b0c0;
+  --line:#25304a;
+  --accent:#7dd3fc;
+  --accent2:#a78bfa;
+  --btn:#1f2a44;
+  --btn2:#182035;
+}
+
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0;
+  font-family: system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,"Apple Color Emoji","Segoe UI Emoji";
+  background: radial-gradient(1200px 700px at 20% 10%, rgba(125,211,252,.14), transparent 60%),
+              radial-gradient(1200px 700px at 80% 0%, rgba(167,139,250,.12), transparent 55%),
+              var(--bg);
+  color:var(--text);
+}
+
+a{color:inherit}
+
+.topbar{
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  background: rgba(11,13,18,.8);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid rgba(37,48,74,.6);
+  padding: 14px 18px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap: 14px;
+}
+
+.brand{display:flex;align-items:center;gap:12px}
+.logo{
+  width:40px;height:40px;border-radius:12px;
+  display:grid;place-items:center;
+  background: linear-gradient(135deg, rgba(125,211,252,.25), rgba(167,139,250,.18));
+  border: 1px solid rgba(125,211,252,.25);
+}
+.title{font-size:16px;font-weight:700;letter-spacing:.2px}
+.subtitle{font-size:12px;color:var(--muted)}
+.actions{display:flex;gap:10px;flex-wrap:wrap}
+
+.container{max-width:980px;margin:22px auto;padding:0 16px 40px}
+.card{
+  background: linear-gradient(180deg, rgba(18,22,34,.94), rgba(15,19,32,.94));
+  border: 1px solid rgba(37,48,74,.75);
+  border-radius: 18px;
+  padding: 18px 18px;
+  box-shadow: 0 20px 60px rgba(0,0,0,.28);
+  margin-bottom: 16px;
+}
+
+h2{margin:0 0 10px;font-size:18px}
+h3{margin:0 0 10px;font-size:16px}
+p{line-height:1.55}
+.muted{color:var(--muted)}
+code{background:rgba(255,255,255,.06);padding:2px 6px;border-radius:8px;border:1px solid rgba(255,255,255,.07)}
+
+.btn{
+  appearance:none;
+  border:1px solid rgba(125,211,252,.18);
+  background: linear-gradient(180deg, rgba(31,42,68,.9), rgba(24,32,53,.9));
+  color: var(--text);
+  padding: 10px 12px;
+  border-radius: 12px;
+  cursor:pointer;
+  font-weight:600;
+}
+.btn:hover{border-color: rgba(125,211,252,.35)}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.btn-secondary{
+  border-color: rgba(167,139,250,.20);
+  background: linear-gradient(180deg, rgba(34,30,56,.9), rgba(22,20,41,.9));
+}
+.btn-small{padding:8px 10px;border-radius:10px;font-size:12px}
+
+.bookmarklet{margin-top:10px}
+.bookmarklet-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.bookmarklet-btn{
+  display:inline-block;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px dashed rgba(125,211,252,.35);
+  background: rgba(125,211,252,.08);
+  text-decoration:none;
+  font-weight:700;
+}
+.details{margin-top:10px}
+.details summary{cursor:pointer;color:var(--accent)}
+.details ol{margin:10px 0 0 18px}
+
+.uploader{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.status{margin-top:10px}
+
+.wrap-shell{margin-top:10px}
+.wrap-nav{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}
+.pager{font-size:12px}
+
+.slides{position:relative}
+.slide{
+  display:none;
+  border-radius: 16px;
+  border: 1px solid rgba(37,48,74,.65);
+  background: rgba(10,12,18,.55);
+  padding: 14px;
+}
+.slide.active{display:block}
+.slide-inner{padding: 10px}
+
+.kpi-grid{
+  display:grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap:12px;
+}
+.kpi{
+  background: rgba(255,255,255,.04);
+  border: 1px solid rgba(255,255,255,.06);
+  border-radius: 16px;
+  padding: 12px;
+}
+.kpi-label{font-size:12px;color:var(--muted)}
+.kpi-value{font-size:28px;font-weight:800;margin-top:6px}
+.kpi-sub{font-size:12px;margin-top:4px}
+
+.grid-2{
+  display:grid;
+  grid-template-columns: 1.2fr .8fr;
+  gap: 14px;
+}
+.grid-1{display:grid;grid-template-columns:1fr;gap:14px}
+
+.list{margin:0;padding-left:18px}
+.list li{margin:8px 0}
+
+.note{
+  margin-top:12px;
+  border-radius: 16px;
+  border: 1px solid rgba(125,211,252,.18);
+  background: linear-gradient(135deg, rgba(125,211,252,.08), rgba(167,139,250,.06));
+  padding: 12px;
+}
+.note-title{font-weight:800}
+.note-body{margin-top:6px;line-height:1.5}
+
+.footer{margin-top:10px;text-align:center;font-size:12px}
+
+@media (max-width: 780px){
+  .kpi-grid{grid-template-columns:1fr}
+  .grid-2{grid-template-columns:1fr}
+}

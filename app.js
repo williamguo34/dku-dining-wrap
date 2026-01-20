@@ -1,0 +1,324 @@
+// DKU Dining Wrap MVP (pure HTML/JS)
+// - Upload CSV
+// - Compute a few fun stats
+// - Render 5 "cards"
+// - Export current/all cards as PNG
+//
+// Expected columns: dateTime,type,txn,service,amount,status
+
+(() => {
+  const BOOKMARKLET_SRC = "https://williamguo34.github.io/dku-dining-wrap/export-dku-transactions.js";
+
+  // --- Elements
+  const elFile = document.getElementById("fileInput");
+  const elStatus = document.getElementById("status");
+
+  const elSlides = document.getElementById("slides");
+  const slides = Array.from(elSlides.querySelectorAll(".slide"));
+  const elPager = document.getElementById("pager");
+  const btnPrev = document.getElementById("btnPrev");
+  const btnNext = document.getElementById("btnNext");
+
+  const btnExportCurrent = document.getElementById("btnExportCurrent");
+  const btnExportAll = document.getElementById("btnExportAll");
+
+  const bookmarkletLink = document.getElementById("bookmarkletLink");
+  const btnCopyBookmarklet = document.getElementById("btnCopyBookmarklet");
+
+  // --- Bookmarklet
+  const bookmarklet = `javascript:(()=>{const u=\"${BOOKMARKLET_SRC}\";const s=document.createElement(\"script\");s.src=u+\"?t=\"+Date.now();s.onerror=()=>alert(\"Failed to load DKU exporter: \"+u);document.documentElement.appendChild(s);})();`;
+  bookmarkletLink.href = bookmarklet;
+
+  btnCopyBookmarklet.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(bookmarklet);
+      btnCopyBookmarklet.textContent = "Copied!";
+      setTimeout(() => (btnCopyBookmarklet.textContent = "Copy bookmarklet"), 1000);
+    } catch {
+      alert("Copy failed. You can manually create a bookmark and paste the bookmarklet.");
+    }
+  });
+
+  // --- Slide navigation
+  let slideIndex = 0;
+  function showSlide(i){
+    slideIndex = Math.max(0, Math.min(slides.length - 1, i));
+    slides.forEach((s, idx) => s.classList.toggle("active", idx === slideIndex));
+    elPager.textContent = `Card ${slideIndex + 1} / ${slides.length} • ${slides[slideIndex].dataset.title || ""}`;
+    btnPrev.disabled = slideIndex === 0;
+    btnNext.disabled = slideIndex === slides.length - 1;
+  }
+  btnPrev.addEventListener("click", () => showSlide(slideIndex - 1));
+  btnNext.addEventListener("click", () => showSlide(slideIndex + 1));
+  showSlide(0);
+
+  // --- Charts
+  let chartTopSpend = null;
+  let chartHours = null;
+  let chartWeekdays = null;
+  let chartMonths = null;
+
+  function destroyChart(ch){
+    if (ch && typeof ch.destroy === "function") ch.destroy();
+    return null;
+  }
+
+  function renderCharts(stats){
+    chartTopSpend = destroyChart(chartTopSpend);
+    chartHours = destroyChart(chartHours);
+    chartWeekdays = destroyChart(chartWeekdays);
+    chartMonths = destroyChart(chartMonths);
+
+    const topSpendLabels = stats.topSpend.map(x => x.key);
+    const topSpendValues = stats.topSpend.map(x => x.value);
+
+    chartTopSpend = new Chart(document.getElementById("chartTopSpend"), {
+      type: "bar",
+      data: { labels: topSpendLabels, datasets: [{ label: "Spend", data: topSpendValues }] },
+      options: {
+        responsive: true,
+        plugins: { legend: { display: false } },
+        scales: { x: { ticks: { maxRotation: 30, minRotation: 0 } } }
+      }
+    });
+
+    chartHours = new Chart(document.getElementById("chartHours"), {
+      type: "bar",
+      data: {
+        labels: stats.hours.map(h => String(h.hour).padStart(2,"0")),
+        datasets: [{ label: "Txns", data: stats.hours.map(h => h.count) }]
+      },
+      options: { responsive: true, plugins: { legend: { display: false } } }
+    });
+
+    chartWeekdays = new Chart(document.getElementById("chartWeekdays"), {
+      type: "bar",
+      data: {
+        labels: stats.weekdays.map(w => w.day),
+        datasets: [{ label: "Txns", data: stats.weekdays.map(w => w.count) }]
+      },
+      options: { responsive: true, plugins: { legend: { display: false } } }
+    });
+
+    chartMonths = new Chart(document.getElementById("chartMonths"), {
+      type: "line",
+      data: {
+        labels: stats.months.map(m => m.month),
+        datasets: [{ label: "Spend", data: stats.months.map(m => m.spend) }]
+      },
+      options: { responsive: true, plugins: { legend: { display: false } } }
+    });
+  }
+
+  // --- CSV parsing + stats
+  function parseAmount(x){
+    const v = Number(String(x ?? "").replace(/[^0-9.\-+]/g,""));
+    return Number.isFinite(v) ? v : 0;
+  }
+
+  function parseDateTime(s){
+    const raw = String(s ?? "").trim();
+    if (!raw) return null;
+
+    let d = new Date(raw);
+    if (!isNaN(d.getTime())) return d;
+
+    const norm = raw.replace(/[./]/g, "-");
+    d = new Date(norm);
+    if (!isNaN(d.getTime())) return d;
+
+    return null;
+  }
+
+  function incMap(map, key, delta){
+    map.set(key, (map.get(key) || 0) + delta);
+  }
+
+  function topNFromMap(map, n){
+    return Array.from(map.entries())
+      .map(([key,value]) => ({key, value}))
+      .sort((a,b) => b.value - a.value)
+      .slice(0, n);
+  }
+
+  function computeStats(rows){
+    const txns = rows.length;
+    const amounts = rows.map(r => parseAmount(r.amount));
+    const totalSpend = amounts.reduce((a,b) => a + b, 0);
+
+    const spendByService = new Map();
+    const visitsByService = new Map();
+
+    const hours = Array.from({length:24}, (_,h)=>({hour:h, count:0}));
+    const weekdays = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"].map(d=>({day:d, count:0}));
+    const spendByMonth = new Map(); // YYYY-MM
+
+    let validTime = 0;
+
+    for (const r of rows){
+      const amt = parseAmount(r.amount);
+      const svc = String(r.service ?? "").trim() || "Unknown";
+      incMap(spendByService, svc, amt);
+      incMap(visitsByService, svc, 1);
+
+      const d = parseDateTime(r.dateTime);
+      if (d){
+        validTime += 1;
+        hours[d.getHours()].count += 1;
+        weekdays[d.getDay()].count += 1;
+
+        const ym = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`;
+        incMap(spendByMonth, ym, amt);
+      }
+    }
+
+    const topSpend = topNFromMap(spendByService, 8);
+    const topVisits = topNFromMap(visitsByService, 8);
+
+    const favorite = topVisits[0]?.key || "—";
+    const favoriteCount = topVisits[0]?.value || 0;
+
+    const peakHour = hours.reduce((best, cur) => cur.count > best.count ? cur : best, hours[0]);
+    const peakWeekday = weekdays.reduce((best, cur) => cur.count > best.count ? cur : best, weekdays[0]);
+
+    const months = Array.from(spendByMonth.entries())
+      .map(([month, spend]) => ({month, spend}))
+      .sort((a,b) => a.month.localeCompare(b.month));
+
+    return { txns, totalSpend, topSpend, topVisits, favorite, favoriteCount, peakHour, peakWeekday, hours, weekdays, months, validTime };
+  }
+
+  function fmtMoney(x){
+    const v = Number(x);
+    if (!Number.isFinite(v)) return "—";
+    return v.toLocaleString(undefined, { maximumFractionDigits: 2, minimumFractionDigits: 0 });
+  }
+
+  function setText(id, txt){
+    const el = document.getElementById(id);
+    if (el) el.textContent = txt;
+  }
+
+  function buildVibeText(stats){
+    if (stats.txns === 0) return "No transactions found in this file.";
+    const nightTxns = stats.hours.filter(h => h.hour >= 22 || h.hour <= 5).reduce((a,b)=>a+b.count,0);
+    const nightRatio = stats.txns ? (nightTxns / stats.txns) : 0;
+
+    const vibeBits = [];
+    vibeBits.push(`You made ${stats.txns} swipes in total.`);
+    vibeBits.push(`Peak time: ${String(stats.peakHour.hour).padStart(2,"0")}:00.`);
+    vibeBits.push(`Busiest day: ${stats.peakWeekday.day}.`);
+
+    if (nightRatio >= 0.25) vibeBits.push("Night owl detected 🦉");
+    else if (stats.peakHour.hour <= 9) vibeBits.push("Morning person energy ☀️");
+    else if (stats.peakHour.hour >= 18) vibeBits.push("Dinner-core 🌙");
+
+    return vibeBits.join(" ");
+  }
+
+  function buildTrendText(stats){
+    if (!stats.months.length) return "Not enough date info to compute monthly trends.";
+    const maxM = stats.months.reduce((a,b)=> b.spend>a.spend ? b : a, stats.months[0]);
+    return `Your biggest month was ${maxM.month} with spend ${fmtMoney(maxM.spend)}.`;
+  }
+
+  function renderTopVisitsList(stats){
+    const ol = document.getElementById("listTopVisits");
+    ol.innerHTML = "";
+    for (const x of stats.topVisits){
+      const li = document.createElement("li");
+      li.textContent = `${x.key} — ${x.value} visits`;
+      ol.appendChild(li);
+    }
+  }
+
+  function renderAll(stats){
+    setText("kpiTotalSpend", fmtMoney(stats.totalSpend));
+    setText("kpiSpendSub", stats.totalSpend >= 0 ? "Total (net) amount" : "Net (refunds exceed spend)");
+    setText("kpiTxnCount", String(stats.txns));
+    setText("kpiTxnSub", stats.validTime ? `${stats.validTime} with timestamps` : "No parsable timestamps");
+    setText("kpiFav", stats.favorite);
+    setText("kpiFavSub", stats.favoriteCount ? `${stats.favoriteCount} visits` : "—");
+    setText("vibeText", buildVibeText(stats));
+    setText("trendText", buildTrendText(stats));
+
+    renderTopVisitsList(stats);
+    renderCharts(stats);
+
+    btnExportCurrent.disabled = false;
+    btnExportAll.disabled = false;
+  }
+
+  // --- Export PNG
+  async function exportElementAsPNG(el, filename){
+    const canvas = await html2canvas(el, { backgroundColor: null, scale: window.devicePixelRatio || 2 });
+    const a = document.createElement("a");
+    a.download = filename;
+    a.href = canvas.toDataURL("image/png");
+    a.click();
+  }
+
+  btnExportCurrent.addEventListener("click", async () => {
+    const active = slides.find(s => s.classList.contains("active"));
+    if (!active) return;
+    const title = active.dataset.title || `card-${slideIndex+1}`;
+    await exportElementAsPNG(active, `dku-wrap-${slideIndex+1}-${slugify(title)}.png`);
+  });
+
+  btnExportAll.addEventListener("click", async () => {
+    const oldIndex = slideIndex;
+    for (let i = 0; i < slides.length; i++){
+      showSlide(i);
+      await new Promise(r => setTimeout(r, 140));
+      const title = slides[i].dataset.title || `card-${i+1}`;
+      await exportElementAsPNG(slides[i], `dku-wrap-${i+1}-${slugify(title)}.png`);
+      await new Promise(r => setTimeout(r, 120));
+    }
+    showSlide(oldIndex);
+  });
+
+  function slugify(s){
+    return String(s).toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/(^-|-$)/g,"");
+  }
+
+  // --- File input
+  btnExportCurrent.disabled = true;
+  btnExportAll.disabled = true;
+
+  elFile.addEventListener("change", () => {
+    const f = elFile.files?.[0];
+    if (!f) return;
+
+    elStatus.textContent = "Parsing CSV…";
+
+    Papa.parse(f, {
+      header: true,
+      skipEmptyLines: true,
+      complete: (res) => {
+        const rows = (res.data || []).filter(Boolean);
+        if (!rows.length){
+          elStatus.textContent = "No rows found in the CSV.";
+          return;
+        }
+
+        const cols = Object.keys(rows[0] || {});
+        const required = ["dateTime","type","service","amount"];
+        const missing = required.filter(c => !cols.includes(c));
+        if (missing.length){
+          elStatus.textContent = `Loaded ${rows.length} rows, but missing columns: ${missing.join(", ")}.`;
+          return;
+        }
+
+        const stats = computeStats(rows);
+        elStatus.textContent = `Loaded ${rows.length} rows • Rendering…`;
+        renderAll(stats);
+        showSlide(0);
+      },
+      error: (err) => {
+        console.error(err);
+        elStatus.textContent = "Failed to parse CSV.";
+      }
+    });
+  });
+
+})();
