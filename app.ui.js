@@ -1,171 +1,5 @@
 // DKU Dining Wrapped 2024 — Entertainment UI Layer
 
-// --- postMessage handoff receiver (Wrap page)
-(() => {
-  const ALLOWED_SENDER_ORIGINS = new Set([
-    "https://dkucard.dukekunshan.edu.cn",
-    // Add more DKU origins here if needed.
-  ]);
-
-  const sessions = new Map(); // sessionId -> { totalChunks, chunks:[], gotEnd:boolean }
-
-  function isValidMsg(msg) {
-    return msg && msg.__dku_wrap__ === true && typeof msg.type === "string" && typeof msg.sessionId === "string";
-  }
-
-  window.addEventListener("message", (ev) => {
-    if (!ALLOWED_SENDER_ORIGINS.has(ev.origin)) return;
-
-    const msg = ev.data;
-    if (!isValidMsg(msg)) return;
-
-    const sessionId = msg.sessionId;
-
-    // Exporter sends PING to trigger READY handshake.
-    if (msg.type === "PING") {
-      ev.source?.postMessage({ __dku_wrap__: true, type: "READY", sessionId }, ev.origin);
-      return;
-    }
-
-    if (msg.type === "META") {
-      sessions.set(sessionId, { totalChunks: msg.totalChunks, chunks: new Array(msg.totalChunks), gotEnd: false });
-      return;
-    }
-
-    if (msg.type === "CHUNK") {
-      const s = sessions.get(sessionId);
-      if (!s) return;
-      if (typeof msg.index !== "number") return;
-      if (msg.index < 0 || msg.index >= s.totalChunks) return;
-      s.chunks[msg.index] = String(msg.data || "");
-      return;
-    }
-
-    if (msg.type === "END") {
-      const s = sessions.get(sessionId);
-      if (!s) return;
-      s.gotEnd = true;
-
-      // Ensure all chunks are present.
-      for (let i = 0; i < s.totalChunks; i++) {
-        if (typeof s.chunks[i] !== "string") {
-          ev.source?.postMessage(
-            { __dku_wrap__: true, type: "ERROR", sessionId, message: `Missing chunk ${i}/${s.totalChunks}` },
-            ev.origin
-          );
-          return;
-        }
-      }
-
-      try {
-        const json = s.chunks.join("");
-        const payload = JSON.parse(json);
-
-        if (!payload || payload.k !== "DKU_WRAP_V1" || !Array.isArray(payload.rows)) {
-          throw new Error("Bad payload shape");
-        }
-
-        if (typeof window.loadAndRenderRowsForHandoff === "function") {
-          window.loadAndRenderRowsForHandoff(payload.rows);
-        } else {
-          console.warn("loadAndRenderRowsForHandoff not wired");
-        }
-
-        ev.source?.postMessage({ __dku_wrap__: true, type: "RECEIVED", sessionId }, ev.origin);
-        sessions.delete(sessionId);
-      } catch (err) {
-        ev.source?.postMessage(
-          { __dku_wrap__: true, type: "ERROR", sessionId, message: String(err?.message || err) },
-          ev.origin
-        );
-      }
-    }
-  });
-})();
-
-// --- postMessage handoff receiver (Wrap page)
-(() => {
-  const ALLOWED_SENDER_ORIGINS = new Set([
-    "https://dkucard.dukekunshan.edu.cn",
-    // Add more DKU origins here if needed.
-  ]);
-
-  const sessions = new Map(); // sessionId -> { totalChunks, chunks:[], gotEnd:boolean }
-
-  function isValidMsg(msg) {
-    return msg && msg.__dku_wrap__ === true && typeof msg.type === "string" && typeof msg.sessionId === "string";
-  }
-
-  window.addEventListener("message", (ev) => {
-    if (!ALLOWED_SENDER_ORIGINS.has(ev.origin)) return;
-
-    const msg = ev.data;
-    if (!isValidMsg(msg)) return;
-
-    const sessionId = msg.sessionId;
-
-    // Exporter sends PING to trigger READY handshake.
-    if (msg.type === "PING") {
-      ev.source?.postMessage({ __dku_wrap__: true, type: "READY", sessionId }, ev.origin);
-      return;
-    }
-
-    if (msg.type === "META") {
-      sessions.set(sessionId, { totalChunks: msg.totalChunks, chunks: new Array(msg.totalChunks), gotEnd: false });
-      return;
-    }
-
-    if (msg.type === "CHUNK") {
-      const s = sessions.get(sessionId);
-      if (!s) return;
-      if (typeof msg.index !== "number") return;
-      if (msg.index < 0 || msg.index >= s.totalChunks) return;
-      s.chunks[msg.index] = String(msg.data || "");
-      return;
-    }
-
-    if (msg.type === "END") {
-      const s = sessions.get(sessionId);
-      if (!s) return;
-      s.gotEnd = true;
-
-      // Ensure all chunks are present.
-      for (let i = 0; i < s.totalChunks; i++) {
-        if (typeof s.chunks[i] !== "string") {
-          ev.source?.postMessage(
-            { __dku_wrap__: true, type: "ERROR", sessionId, message: `Missing chunk ${i}/${s.totalChunks}` },
-            ev.origin
-          );
-          return;
-        }
-      }
-
-      try {
-        const json = s.chunks.join("");
-        const payload = JSON.parse(json);
-
-        if (!payload || payload.k !== "DKU_WRAP_V1" || !Array.isArray(payload.rows)) {
-          throw new Error("Bad payload shape");
-        }
-
-        if (typeof window.loadAndRenderRowsForHandoff === "function") {
-          window.loadAndRenderRowsForHandoff(payload.rows);
-        } else {
-          console.warn("loadAndRenderRowsForHandoff not wired");
-        }
-
-        ev.source?.postMessage({ __dku_wrap__: true, type: "RECEIVED", sessionId }, ev.origin);
-        sessions.delete(sessionId);
-      } catch (err) {
-        ev.source?.postMessage(
-          { __dku_wrap__: true, type: "ERROR", sessionId, message: String(err?.message || err) },
-          ev.origin
-        );
-      }
-    }
-  });
-})();
-
 (() => {
   const BOOKMARKLET_SRC = "https://williamguo34.github.io/dku-dining-wrap/export-dku-transactions.js";
   const HANDOFF_STORAGE_KEY = "DKU_WRAP_V1"; // must match exporter
@@ -275,20 +109,6 @@
 2024-09-20 14:00:00,Social Medical Insurance,,50.00,Success
 2024-09-25 16:00:00,Expense,123456854,Pharos Printing,-5.00,Success`;
 
-  // --- Safari / fallback JSON import
-  const elJsonInput = document.getElementById("jsonInput");
-  const btnPasteJson = document.getElementById("btnPasteJson");
-  const btnImportJson = document.getElementById("btnImportJson");
-  const btnClearJson = document.getElementById("btnClearJson");
-  const detailsJsonImport = document.getElementById("jsonImport");
-
-  // --- Safari / fallback JSON import
-  const elJsonInput = document.getElementById("jsonInput");
-  const btnPasteJson = document.getElementById("btnPasteJson");
-  const btnImportJson = document.getElementById("btnImportJson");
-  const btnClearJson = document.getElementById("btnClearJson");
-  const detailsJsonImport = document.getElementById("jsonImport");
-
   // --- Bookmarklet
   const bookmarklet = `javascript:(()=>{const u=\"${BOOKMARKLET_SRC}\";const s=document.createElement(\"script\");s.src=u+\"?t=\"+Date.now();s.onerror=()=>alert(\"Failed to load DKU exporter: \"+u);document.documentElement.appendChild(s);})();`;
   bookmarkletLink.href = bookmarklet;
@@ -343,18 +163,20 @@
   showSlide(0);
 
   // --- One-click flow: auto import from exporter via window.name
-  function parseHandoffString(s) {
-    if (!s) return null;
+  function tryLoadFromWindowName() {
+    if (!window.name) return null;
     const prefix = `${HANDOFF_STORAGE_KEY}:`;
-    const raw = String(s);
-    if (!raw.startsWith(prefix)) return null;
+    if (!window.name.startsWith(prefix)) return null;
 
     try {
-      const json = raw.slice(prefix.length);
+      const json = window.name.slice(prefix.length);
       const payload = JSON.parse(json);
       if (!payload || payload.k !== HANDOFF_STORAGE_KEY || !Array.isArray(payload.rows)) {
         throw new Error("bad payload shape");
       }
+
+      // Clear immediately to avoid re-import on refresh
+      window.name = "";
       return payload.rows;
     } catch (err) {
       // Most common cause: window.name is truncated by the browser (size limits vary).
@@ -362,40 +184,11 @@
       elStatus.textContent =
         "One-click data transfer was detected but could not be read (likely too large / truncated). " +
         "Please re-run the exporter in CSV download mode and upload the CSV here.";
+      // Clear to avoid endless failures on refresh.
+      window.name = "";
       console.warn("window.name handoff parse failed:", err);
       return null;
     }
-  }
-
-  function tryLoadFromWindowName() {
-    // Try current window and top window (best-effort). Some sites embed iframes.
-    const rows = parseHandoffString(window.name) || parseHandoffString((() => {
-      try { return window.top?.name; } catch { return null; }
-    })());
-
-    if (rows) {
-      // Clear immediately to avoid re-import on refresh
-      try { window.name = ""; } catch {}
-      try { window.top.name = ""; } catch {}
-    }
-    return rows;
-  }
-
-  function tryParseJsonImport(text) {
-    const t = String(text || "").trim();
-    if (!t) return null;
-
-    // Accept either the raw payload JSON (exporter clipboard),
-    // or the full window.name string: DKU_WRAP_V1:{...}
-    let jsonText = t;
-    const prefix = `${HANDOFF_STORAGE_KEY}:`;
-    if (t.startsWith(prefix)) jsonText = t.slice(prefix.length);
-
-    const payload = JSON.parse(jsonText);
-    if (!payload || payload.k !== HANDOFF_STORAGE_KEY || !Array.isArray(payload.rows)) {
-      throw new Error("Bad JSON payload. Expected {k:'DKU_WRAP_V1', rows:[...]}.");
-    }
-    return payload.rows;
   }
 
   // --- Charts
@@ -743,6 +536,29 @@
     setText("totalInvested", `¥${fmtMoney(stats.totalSpend)}`);
   }
 
+  function renderComparisonSlide(stats) {
+    const slide = document.querySelector('[data-title="Compared to DKU"]');
+    if (!slide) return;
+
+    // Calculate approximate percentiles (simplified)
+    const mealsPerMonth = Math.floor(stats.txns / Math.max(1, stats.months.length));
+    const spendingPerMonth = stats.totalSpend / Math.max(1, stats.months.length);
+
+    // Mock percentiles (in real app, you'd have actual DKU data)
+    let frequencyPercentile = "Top 75%";
+    if (mealsPerMonth > 25) frequencyPercentile = "Top 25%";
+    if (mealsPerMonth > 35) frequencyPercentile = "Top 10%";
+
+    let spendingPercentile = "Top 60%";
+    if (spendingPerMonth > 1500) spendingPercentile = "Top 30%";
+    if (spendingPerMonth > 2500) spendingPercentile = "Top 15%";
+
+    setText("mealFrequency", `${mealsPerMonth} meals/month`);
+    setText("frequencyPercentile", frequencyPercentile);
+    setText("spendingLevel", `¥${fmtMoney(spendingPerMonth)}/month`);
+    setText("spendingPercentile", spendingPercentile);
+  }
+
   function renderEndingSlide(stats) {
     const slide = document.querySelector('[data-title="The End"]');
     if (!slide) return;
@@ -759,6 +575,7 @@
     renderTimelineSlide(stats);
     renderMoneySlide(stats);
     renderAchievementsSlide(stats);
+    renderComparisonSlide(stats);
     renderMemoriesSlide(stats);
     renderPredictionsSlide(stats);
     renderShareableQuotesSlide(stats);
@@ -779,9 +596,6 @@
     renderAllEntertaining(stats);
     showSlide(0);
   }
-
-  // Expose a stable entrypoint for postMessage handoff.
-  window.loadAndRenderRowsForHandoff = (rows) => loadAndRenderRows(rows, "One-click export");
 
   // --- Export PNG
   async function exportElementAsPNG(el, filename){
@@ -851,52 +665,6 @@
       }
     });
   });
-
-  // --- JSON import (Safari fallback)
-  if (btnClearJson && elJsonInput) {
-    btnClearJson.addEventListener("click", () => {
-      elJsonInput.value = "";
-      elJsonInput.focus();
-    });
-  }
-
-  if (btnPasteJson && elJsonInput) {
-    btnPasteJson.addEventListener("click", async () => {
-      try {
-        const t = await navigator.clipboard.readText();
-        elJsonInput.value = t || "";
-        elJsonInput.focus();
-      } catch {
-        alert("Clipboard read was blocked. Please paste manually.");
-      }
-    });
-  }
-
-  if (btnImportJson && elJsonInput) {
-    btnImportJson.addEventListener("click", () => {
-      try {
-        const rows = tryParseJsonImport(elJsonInput.value);
-        if (!rows || !rows.length) {
-          elStatus.textContent = "JSON imported, but no rows were found.";
-          return;
-        }
-        loadAndRenderRows(rows, "JSON");
-        elJsonInput.value = "";
-      } catch (err) {
-        console.warn(err);
-        alert(String(err?.message || err || "Failed to import JSON"));
-      }
-    });
-  }
-
-  // If exporter opened this page with #paste, expand JSON import and focus.
-  if (detailsJsonImport && elJsonInput && String(location.hash || "") === "#paste") {
-    detailsJsonImport.open = true;
-    setTimeout(() => {
-      elJsonInput.scrollIntoView({ behavior: "smooth", block: "center" });
-      elJsonInput.focus();
-    }, 120);
-  }
 
   // Auto-import when arriving from the exporter (window.name handoff)
   const handoffRows = tryLoadFromWindowName();
