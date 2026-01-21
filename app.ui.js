@@ -1,7 +1,7 @@
 // DKU Dining Wrapped 2024 — Entertainment UI Layer
 
 (() => {
-  const BOOKMARKLET_SRC = "https://williamguo34.github.io/dku-dining-wrap/export-dku-transactions.js";
+  const BOOKMARKLET_SRC = "https://damao2.github.io/dku-dining-wrap-2/export-dku-transactions.js";
   const HANDOFF_STORAGE_KEY = "DKU_WRAP_V1"; // must match exporter
 
   const {
