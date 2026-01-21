@@ -26,7 +26,7 @@
    * before running the script.
    ***********************/
 
-  const WRAP_URL = "https://damao2.github.io/dku-dining-wrap-2/";
+  const WRAP_URL = "https://williamguo34.github.io/dku-dining-wrap/";
   const HANDOFF_STORAGE_KEY = "DKU_WRAP_V1";
   // Safari is much more likely to truncate/clear window.name on cross-site navigation.
   // Keep this conservative; we also provide clipboard/CSV fallbacks.
